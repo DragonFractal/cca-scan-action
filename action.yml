@@ -62,13 +62,13 @@ runs:
     - name: Install CCA
       shell: bash
       run: |
-        mkdir -p "$HOME/.local/bin"
-        if [ "${{ inputs.version }}" = "latest" ]; then
-          CCA_INSTALL_DIR="$HOME/.local/bin" curl -sSL https://releases.dragonfractal.com/install.sh | sh
-        else
-          CCA_INSTALL_DIR="$HOME/.local/bin" CCA_VERSION="${{ inputs.version }}" curl -sSL https://releases.dragonfractal.com/install.sh | sh
+        export CCA_INSTALL_DIR="$HOME/.local/bin"
+        mkdir -p "$CCA_INSTALL_DIR"
+        if [ "${{ inputs.version }}" != "latest" ]; then
+          export CCA_VERSION="${{ inputs.version }}"
         fi
-        echo "$HOME/.local/bin" >> $GITHUB_PATH
+        curl -sSL https://releases.dragonfractal.com/install.sh | sh
+        echo "$CCA_INSTALL_DIR" >> $GITHUB_PATH
 
     - name: Run CCA scan
       id: scan
