@@ -10,7 +10,7 @@ Scan your cloud infrastructure for cost optimization opportunities using [Cloud 
     api-key: ${{ secrets.CCA_API_KEY }}
 ```
 
-That's it. The action installs CCA, runs a scan against your AWS account, and posts results as a PR comment.
+That's it. The action runs CCA (via its container image) against your AWS account and posts results as a PR comment.
 
 ## Usage
 
@@ -49,7 +49,6 @@ jobs:
     api-key: ${{ secrets.CCA_API_KEY }}
     provider: aws
     regions: us-east-1,us-west-2
-    output-format: json
     output-file: scan-results.json
     comment-on-pr: 'true'
     fail-on-findings: '50'
@@ -97,8 +96,7 @@ jobs:
 | `regions` | No | — | Comma-separated regions (e.g. `us-east-1,us-west-2`) |
 | `service-url` | No | `https://cca.dragonfractal.com` | CCA service URL |
 | `version` | No | `latest` | CCA CLI version |
-| `output-format` | No | `json` | Output format (`table`, `json`, `yaml`, `markdown`) |
-| `output-file` | No | `cca-scan-results.json` | Path to save results |
+| `output-file` | No | `cca-scan-results.json` | Path to save the JSON scan results |
 | `comment-on-pr` | No | `true` | Post summary as PR comment |
 | `fail-on-findings` | No | `0` | Fail if findings exceed threshold (0 = never) |
 
@@ -108,14 +106,12 @@ jobs:
 |--------|-------------|
 | `findings-count` | Number of findings detected |
 | `total-savings` | Total potential monthly savings (USD) |
-| `scan-id` | Scan ID from the managed backend |
-| `optimization-score` | Infrastructure optimization score (0-100) |
 
 ## PR Comment
 
 When `comment-on-pr` is enabled (default), the action posts a formatted comment on the PR with:
 
-- Summary table (findings, savings, score)
+- Summary table (findings, savings)
 - Top 10 findings by savings
 - Link to the full report on the CCA dashboard
 

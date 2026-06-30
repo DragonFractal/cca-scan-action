@@ -25,12 +25,8 @@ inputs:
     description: 'CCA Docker image version tag (default: latest)'
     required: false
     default: 'latest'
-  output-format:
-    description: 'Output format: table, json, yaml, markdown'
-    required: false
-    default: 'json'
   output-file:
-    description: 'Path to save scan results'
+    description: 'Path to save the JSON scan results'
     required: false
     default: 'cca-scan-results.json'
   comment-on-pr:
@@ -49,9 +45,6 @@ outputs:
   total-savings:
     description: 'Total potential monthly savings (USD)'
     value: ${{ steps.scan.outputs.total_savings }}
-  optimization-score:
-    description: 'Infrastructure optimization score (0-100)'
-    value: ${{ steps.scan.outputs.optimization_score }}
 
 runs:
   using: 'composite'
@@ -64,63 +57,48 @@ runs:
       id: scan
       shell: bash
       run: |
-        # Build docker run command with AWS creds passed through
+        set -euo pipefail
+
+        # Pass cloud creds through; mark the run as a GitHub Action so backend
+        # activation tracking attributes it correctly.
         DOCKER_ARGS="--rm"
         DOCKER_ARGS="$DOCKER_ARGS -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY"
         DOCKER_ARGS="$DOCKER_ARGS -e AWS_SESSION_TOKEN -e AWS_DEFAULT_REGION -e AWS_REGION"
+        DOCKER_ARGS="$DOCKER_ARGS -e CCA_RUNNER=github_action"
         DOCKER_ARGS="$DOCKER_ARGS -v $(pwd):/output -w /output"
 
+        # Always scan to JSON — the action's outputs, PR comment, and threshold
+        # are derived from it with jq.
         CCA_ARGS="scan --provider ${{ inputs.provider }}"
         CCA_ARGS="$CCA_ARGS --api-key ${{ inputs.api-key }}"
         CCA_ARGS="$CCA_ARGS --service-url ${{ inputs.service-url }}"
-
         if [ -n "${{ inputs.regions }}" ]; then
           CCA_ARGS="$CCA_ARGS --regions ${{ inputs.regions }}"
         fi
+        CCA_ARGS="$CCA_ARGS -o json -f /output/${{ inputs.output-file }} --all"
 
-        CCA_ARGS="$CCA_ARGS -o ${{ inputs.output-format }}"
-        CCA_ARGS="$CCA_ARGS -f /output/${{ inputs.output-file }}"
-        CCA_ARGS="$CCA_ARGS --all"
-
-        echo "Running: docker run $DOCKER_ARGS dragonfractal/cca:${{ inputs.version }} $CCA_ARGS"
+        echo "Running CCA scan (runner=github_action)…"
         docker run $DOCKER_ARGS dragonfractal/cca:${{ inputs.version }} $CCA_ARGS || true
 
-        # Parse results
-        if [ -f "${{ inputs.output-file }}" ]; then
-          FINDINGS=$(python3 -c "
-        import json
-        with open('${{ inputs.output-file }}') as f:
-            data = json.load(f)
-        print(len(data.get('findings', [])))
-        " 2>/dev/null || echo "0")
-
-          SAVINGS=$(python3 -c "
-        import json
-        with open('${{ inputs.output-file }}') as f:
-            data = json.load(f)
-        s = data.get('summary', {})
-        print(f'{s.get(\"total_monthly_savings\", 0):.2f}')
-        " 2>/dev/null || echo "0.00")
-
-          # total_findings includes gated findings for community tier
-          TOTAL=$(python3 -c "
-        import json
-        with open('${{ inputs.output-file }}') as f:
-            data = json.load(f)
-        s = data.get('summary', {})
-        print(s.get('total_findings', len(data.get('findings', []))))
-        " 2>/dev/null || echo "$FINDINGS")
+        OUT="${{ inputs.output-file }}"
+        if [ -s "$OUT" ] && jq -e . "$OUT" >/dev/null 2>&1; then
+          # total_findings includes gated findings on the community tier.
+          FINDINGS=$(jq -r '.summary.total_findings // (.findings | length) // 0' "$OUT")
+          SAVINGS=$(jq -r '(.summary.total_monthly_savings // 0) * 100 | round / 100' "$OUT")
         else
+          echo "::warning::CCA produced no parseable JSON at $OUT; reporting zero."
           FINDINGS=0
-          SAVINGS="0.00"
-          TOTAL=0
+          SAVINGS=0
         fi
+        SAVINGS=$(printf '%.2f' "$SAVINGS")
 
-        echo "findings_count=$TOTAL" >> $GITHUB_OUTPUT
-        echo "total_savings=$SAVINGS" >> $GITHUB_OUTPUT
+        {
+          echo "findings_count=$FINDINGS"
+          echo "total_savings=$SAVINGS"
+        } >> "$GITHUB_OUTPUT"
 
         echo "=== CCA Scan Summary ==="
-        echo "  Findings: $TOTAL"
+        echo "  Findings: $FINDINGS"
         echo "  Potential savings: \$$SAVINGS/mo"
 
     - name: Comment on PR
@@ -129,54 +107,43 @@ runs:
       env:
         GH_TOKEN: ${{ github.token }}
       run: |
+        set -euo pipefail
         FINDINGS="${{ steps.scan.outputs.findings_count }}"
         SAVINGS="${{ steps.scan.outputs.total_savings }}"
+        OUT="${{ inputs.output-file }}"
 
-        # Build top findings table
-        TOP_FINDINGS=""
-        if [ -f "${{ inputs.output-file }}" ]; then
-          TOP_FINDINGS=$(python3 -c "
-        import json
-        with open('${{ inputs.output-file }}') as f:
-            data = json.load(f)
-        findings = data.get('findings', [])
-        if not findings:
-            print('No detailed findings available (upgrade for full details).')
-        else:
-            sorted_f = sorted(findings, key=lambda x: x.get('estimated_monthly_savings', 0), reverse=True)[:10]
-            print('| Severity | Category | Resource | Savings |')
-            print('|----------|----------|----------|---------|')
-            for f in sorted_f:
-                sev = f.get('severity', '?')
-                cat = f.get('category', '?')
-                res = f.get('resource_id', '?')[:40]
-                sav = f.get('estimated_monthly_savings', 0)
-                print(f'| {sev} | {cat} | \`{res}\` | \${sav:.2f}/mo |')
-        " 2>/dev/null || echo "Failed to parse findings")
+        # Top findings table, rendered declaratively from the JSON with jq.
+        if [ -s "$OUT" ] && jq -e . "$OUT" >/dev/null 2>&1; then
+          TOP=$(jq -r '
+            (.findings // []) | sort_by(-(.estimated_monthly_savings // 0)) | .[:10] as $t
+            | if ($t | length) == 0 then "No detailed findings available (upgrade for full details)."
+              else (
+                ["| Severity | Category | Resource | Savings |", "|---|---|---|---|"]
+                + ($t | map("| \(.severity // "?") | \(.category // "?") | `\((.resource_id // "?")[0:40])` | $\(((.estimated_monthly_savings // 0) * 100 | round / 100))/mo |"))
+              ) | join("\n")
+              end
+          ' "$OUT")
+        else
+          TOP="No detailed findings available."
         fi
 
-        BODY=$(cat <<'ENDOFCOMMENT'
-        ## Cloud Cost Analyzer — Scan Results
+        {
+          echo "## Cloud Cost Analyzer — Scan Results"
+          echo ""
+          echo "| Metric | Value |"
+          echo "|--------|-------|"
+          echo "| Findings | **$FINDINGS** |"
+          echo "| Potential Savings | **\$$SAVINGS/mo** |"
+          echo ""
+          echo "### Top Findings"
+          echo ""
+          echo "$TOP"
+          echo ""
+          echo "---"
+          echo "*Scanned by [Cloud Cost Analyzer](https://cca.dragonfractal.com)*"
+        } > cca-comment.md
 
-        | Metric | Value |
-        |--------|-------|
-        | Findings | **FINDINGS_PLACEHOLDER** |
-        | Potential Savings | **$SAVINGS_PLACEHOLDER/mo** |
-
-        ### Top Findings
-
-        TOP_FINDINGS_PLACEHOLDER
-
-        ---
-        *Scanned by [Cloud Cost Analyzer](https://cca.dragonfractal.com)*
-        ENDOFCOMMENT
-        )
-
-        BODY="${BODY//FINDINGS_PLACEHOLDER/$FINDINGS}"
-        BODY="${BODY//SAVINGS_PLACEHOLDER/$SAVINGS}"
-        BODY="${BODY//TOP_FINDINGS_PLACEHOLDER/$TOP_FINDINGS}"
-
-        gh pr comment "${{ github.event.pull_request.number }}" --body "$BODY"
+        gh pr comment "${{ github.event.pull_request.number }}" --body-file cca-comment.md
 
     - name: Check threshold
       if: inputs.fail-on-findings != '0'
