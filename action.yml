@@ -61,7 +61,9 @@ runs:
       env:
         # Bind inputs to env so their values are never interpolated into the
         # script text (avoids shell/script injection via untrusted input).
-        API_KEY: ${{ inputs.api-key }}
+        # The CLI reads the key from CCA_API_KEY (clap `env`), so it's passed
+        # into the container by env only — never on argv (keeps it out of `ps`).
+        CCA_API_KEY: ${{ inputs.api-key }}
         PROVIDER: ${{ inputs.provider }}
         REGIONS: ${{ inputs.regions }}
         SERVICE_URL: ${{ inputs.service-url }}
@@ -75,12 +77,13 @@ runs:
         DOCKER_ARGS=(--rm)
         DOCKER_ARGS+=(-e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY)
         DOCKER_ARGS+=(-e AWS_SESSION_TOKEN -e AWS_DEFAULT_REGION -e AWS_REGION)
-        DOCKER_ARGS+=(-e CCA_RUNNER=github_action)
+        DOCKER_ARGS+=(-e CCA_RUNNER=github_action -e CCA_API_KEY)
         DOCKER_ARGS+=(-v "$(pwd):/output" -w /output)
 
         # Always scan to JSON — the action's outputs, PR comment, and threshold
-        # are derived from it with jq.
-        CCA_ARGS=(scan --provider "$PROVIDER" --api-key "$API_KEY" --service-url "$SERVICE_URL")
+        # are derived from it with jq. The key is passed via CCA_API_KEY env
+        # (see -e above), so it never appears on argv.
+        CCA_ARGS=(scan --provider "$PROVIDER" --service-url "$SERVICE_URL")
         if [ -n "$REGIONS" ]; then
           CCA_ARGS+=(--regions "$REGIONS")
         fi
