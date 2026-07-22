@@ -99,6 +99,7 @@ jobs:
 | `output-file` | No | `cca-scan-results.json` | Path to save the JSON scan results |
 | `comment-on-pr` | No | `true` | Post summary as PR comment |
 | `fail-on-findings` | No | `0` | Fail if findings exceed threshold (0 = never) |
+| `fail-on-scan-error` | No | `true` | Fail the action if the scan can't run at all (vs. finding nothing) |
 
 ## Outputs
 
@@ -106,6 +107,18 @@ jobs:
 |--------|-------------|
 | `findings-count` | Number of findings detected |
 | `total-savings` | Total potential monthly savings (USD) |
+| `scan-status` | `ok` if the scan completed, `failed` if it could not run |
+
+## Scan Failures
+
+A scan that **can't run** (bad credentials, unreachable service, wrong image version) is reported as a failure — not as "0 findings". When this happens the action:
+
+- prints a `::error::` annotation with the reason,
+- posts a **⚠️ Scan Failed** PR comment (when commenting is enabled) instead of a misleading `$0 / 0 findings` result,
+- sets `scan-status: failed`, and
+- **fails the action** so it can't pass silently.
+
+Set `fail-on-scan-error: 'false'` to downgrade a failed scan to a warning (still annotated and commented, but non-blocking). A scan that runs and genuinely finds nothing is always `ok`.
 
 ## PR Comment
 
