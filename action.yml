@@ -51,36 +51,45 @@ runs:
   steps:
     - name: Pull CCA image
       shell: bash
-      run: docker pull dragonfractal/cca:${{ inputs.version }}
+      env:
+        VERSION: ${{ inputs.version }}
+      run: docker pull "dragonfractal/cca:$VERSION"
 
     - name: Run CCA scan
       id: scan
       shell: bash
+      env:
+        # Bind inputs to env so their values are never interpolated into the
+        # script text (avoids shell/script injection via untrusted input).
+        API_KEY: ${{ inputs.api-key }}
+        PROVIDER: ${{ inputs.provider }}
+        REGIONS: ${{ inputs.regions }}
+        SERVICE_URL: ${{ inputs.service-url }}
+        VERSION: ${{ inputs.version }}
+        OUTPUT_FILE: ${{ inputs.output-file }}
       run: |
         set -euo pipefail
 
         # Pass cloud creds through; mark the run as a GitHub Action so backend
         # activation tracking attributes it correctly.
-        DOCKER_ARGS="--rm"
-        DOCKER_ARGS="$DOCKER_ARGS -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY"
-        DOCKER_ARGS="$DOCKER_ARGS -e AWS_SESSION_TOKEN -e AWS_DEFAULT_REGION -e AWS_REGION"
-        DOCKER_ARGS="$DOCKER_ARGS -e CCA_RUNNER=github_action"
-        DOCKER_ARGS="$DOCKER_ARGS -v $(pwd):/output -w /output"
+        DOCKER_ARGS=(--rm)
+        DOCKER_ARGS+=(-e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY)
+        DOCKER_ARGS+=(-e AWS_SESSION_TOKEN -e AWS_DEFAULT_REGION -e AWS_REGION)
+        DOCKER_ARGS+=(-e CCA_RUNNER=github_action)
+        DOCKER_ARGS+=(-v "$(pwd):/output" -w /output)
 
         # Always scan to JSON — the action's outputs, PR comment, and threshold
         # are derived from it with jq.
-        CCA_ARGS="scan --provider ${{ inputs.provider }}"
-        CCA_ARGS="$CCA_ARGS --api-key ${{ inputs.api-key }}"
-        CCA_ARGS="$CCA_ARGS --service-url ${{ inputs.service-url }}"
-        if [ -n "${{ inputs.regions }}" ]; then
-          CCA_ARGS="$CCA_ARGS --regions ${{ inputs.regions }}"
+        CCA_ARGS=(scan --provider "$PROVIDER" --api-key "$API_KEY" --service-url "$SERVICE_URL")
+        if [ -n "$REGIONS" ]; then
+          CCA_ARGS+=(--regions "$REGIONS")
         fi
-        CCA_ARGS="$CCA_ARGS -o json -f /output/${{ inputs.output-file }} --all"
+        CCA_ARGS+=(-o json -f "/output/$OUTPUT_FILE" --all)
 
         echo "Running CCA scan (runner=github_action)…"
-        docker run $DOCKER_ARGS dragonfractal/cca:${{ inputs.version }} $CCA_ARGS || true
+        docker run "${DOCKER_ARGS[@]}" "dragonfractal/cca:$VERSION" "${CCA_ARGS[@]}" || true
 
-        OUT="${{ inputs.output-file }}"
+        OUT="$OUTPUT_FILE"
         if [ -s "$OUT" ] && jq -e . "$OUT" >/dev/null 2>&1; then
           # total_findings includes gated findings on the community tier.
           FINDINGS=$(jq -r '.summary.total_findings // (.findings | length) // 0' "$OUT")
@@ -106,11 +115,12 @@ runs:
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}
+        FINDINGS: ${{ steps.scan.outputs.findings_count }}
+        SAVINGS: ${{ steps.scan.outputs.total_savings }}
+        OUT: ${{ inputs.output-file }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
       run: |
         set -euo pipefail
-        FINDINGS="${{ steps.scan.outputs.findings_count }}"
-        SAVINGS="${{ steps.scan.outputs.total_savings }}"
-        OUT="${{ inputs.output-file }}"
 
         # Top findings table, rendered declaratively from the JSON with jq.
         if [ -s "$OUT" ] && jq -e . "$OUT" >/dev/null 2>&1; then
@@ -143,14 +153,15 @@ runs:
           echo "*Scanned by [Cloud Cost Analyzer](https://cca.dragonfractal.com)*"
         } > cca-comment.md
 
-        gh pr comment "${{ github.event.pull_request.number }}" --body-file cca-comment.md
+        gh pr comment "$PR_NUMBER" --body-file cca-comment.md
 
     - name: Check threshold
       if: inputs.fail-on-findings != '0'
       shell: bash
+      env:
+        FINDINGS: ${{ steps.scan.outputs.findings_count }}
+        THRESHOLD: ${{ inputs.fail-on-findings }}
       run: |
-        FINDINGS="${{ steps.scan.outputs.findings_count }}"
-        THRESHOLD="${{ inputs.fail-on-findings }}"
         if [ "$FINDINGS" -gt "$THRESHOLD" ]; then
           echo "::error::CCA found $FINDINGS findings (threshold: $THRESHOLD)"
           exit 1
