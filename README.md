@@ -1,7 +1,7 @@
 # 💰 CCA Cost Scan — GitHub Action
 
 [![GitHub Marketplace](https://img.shields.io/badge/Marketplace-CCA%20Cost%20Scan-2088FF?logo=github)](https://github.com/marketplace/actions/cca-cost-scan)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
 [![Powered by Cloud Cost Analyzer](https://img.shields.io/badge/Powered%20by-Cloud%20Cost%20Analyzer-blue)](https://cca.dragonfractal.com)
 
 Scan your cloud infrastructure for cost-optimization opportunities straight from CI, and get the savings posted right on your pull request — powered by [**Cloud Cost Analyzer (CCA)**](https://cca.dragonfractal.com).
@@ -204,4 +204,4 @@ No credentials or results leave your runner except the scan request to the CCA s
 
 ## License
 
-[MIT](./LICENSE) © DragonFractal
+[Apache 2.0](./LICENSE) © DragonFractal — see [`NOTICE`](./NOTICE) for attribution.
