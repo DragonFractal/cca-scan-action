@@ -52,7 +52,7 @@ jobs:
     output-file: scan-results.json
     comment-on-pr: 'true'
     fail-on-findings: '50'
-    version: v0.1.0
+    version: latest
 ```
 
 ### Fail on Too Many Findings
@@ -113,7 +113,7 @@ When `comment-on-pr` is enabled (default), the action posts a formatted comment 
 
 - Summary table (findings, savings)
 - Top 10 findings by savings
-- Link to the full report on the CCA dashboard
+- Link to Cloud Cost Analyzer
 
 ## Prerequisites
 
