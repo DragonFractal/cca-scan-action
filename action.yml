@@ -122,8 +122,13 @@ runs:
         SAVINGS: ${{ steps.scan.outputs.total_savings }}
         OUT: ${{ inputs.output-file }}
         PR_NUMBER: ${{ github.event.pull_request.number }}
+        REPO: ${{ github.repository }}
       run: |
         set -euo pipefail
+
+        # Hidden marker so re-runs update this comment instead of stacking new
+        # ones. Kept as the first line of the body.
+        MARKER="<!-- cca-scan-results -->"
 
         # Top findings table, rendered declaratively from the JSON with jq.
         if [ -s "$OUT" ] && jq -e . "$OUT" >/dev/null 2>&1; then
@@ -141,6 +146,7 @@ runs:
         fi
 
         {
+          echo "$MARKER"
           echo "## Cloud Cost Analyzer — Scan Results"
           echo ""
           echo "| Metric | Value |"
@@ -156,7 +162,17 @@ runs:
           echo "*Scanned by [Cloud Cost Analyzer](https://cca.dragonfractal.com)*"
         } > cca-comment.md
 
-        gh pr comment "$PR_NUMBER" --body-file cca-comment.md
+        # Update our existing comment if one is already on the PR, else create it.
+        COMMENT_ID=$(gh api --paginate "repos/$REPO/issues/$PR_NUMBER/comments" \
+          --jq ".[] | select(.body | contains(\"$MARKER\")) | .id" | head -n1)
+
+        if [ -n "$COMMENT_ID" ]; then
+          jq -Rs '{body: .}' cca-comment.md \
+            | gh api -X PATCH "repos/$REPO/issues/comments/$COMMENT_ID" --input - >/dev/null
+          echo "Updated existing CCA comment ($COMMENT_ID)."
+        else
+          gh pr comment "$PR_NUMBER" --body-file cca-comment.md
+        fi
 
     - name: Check threshold
       if: inputs.fail-on-findings != '0'
