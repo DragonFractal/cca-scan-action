@@ -1,8 +1,16 @@
-# 💰 CCA Cost Scan — GitHub Action
+<p align="center">
+  <a href="https://cca.dragonfractal.com">
+    <img src="https://raw.githubusercontent.com/DragonFractal/cca-scan-action/main/assets/cca-df-logo.png" alt="Cloud Cost Analyzer — by DragonFractal" width="820">
+  </a>
+</p>
 
-[![GitHub Marketplace](https://img.shields.io/badge/Marketplace-CCA%20Cost%20Scan-2088FF?logo=github)](https://github.com/marketplace/actions/cca-cost-scan)
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
-[![Powered by Cloud Cost Analyzer](https://img.shields.io/badge/Powered%20by-Cloud%20Cost%20Analyzer-blue)](https://cca.dragonfractal.com)
+<h1 align="center">💰 CCA Cost Scan — GitHub Action</h1>
+
+<p align="center">
+  <a href="https://github.com/marketplace/actions/cca-cost-scan"><img src="https://img.shields.io/badge/Marketplace-CCA%20Cost%20Scan-2088FF?logo=github" alt="GitHub Marketplace"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License: Apache 2.0"></a>
+  <a href="https://cca.dragonfractal.com"><img src="https://img.shields.io/badge/Powered%20by-Cloud%20Cost%20Analyzer-blue" alt="Powered by Cloud Cost Analyzer"></a>
+</p>
 
 Scan your cloud infrastructure for cost-optimization opportunities straight from CI, and get the savings posted right on your pull request — powered by [**Cloud Cost Analyzer (CCA)**](https://cca.dragonfractal.com).
 
