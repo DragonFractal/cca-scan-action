@@ -37,6 +37,10 @@ inputs:
     description: 'Fail the action if findings exceed this threshold (0 = never fail)'
     required: false
     default: '0'
+  fail-on-scan-error:
+    description: 'Fail the action if the scan fails to run at all (distinct from finding nothing). true/false'
+    required: false
+    default: 'true'
 
 outputs:
   findings-count:
@@ -45,6 +49,9 @@ outputs:
   total-savings:
     description: 'Total potential monthly savings (USD)'
     value: ${{ steps.scan.outputs.total_savings }}
+  scan-status:
+    description: 'Whether the scan completed (ok) or failed to run (failed)'
+    value: ${{ steps.scan.outputs.scan_status }}
 
 runs:
   using: 'composite'
@@ -90,15 +97,29 @@ runs:
         CCA_ARGS+=(-o json -f "/output/$OUTPUT_FILE" --all)
 
         echo "Running CCA scan (runner=github_action)…"
-        docker run "${DOCKER_ARGS[@]}" "dragonfractal/cca:$VERSION" "${CCA_ARGS[@]}" || true
+        set +e
+        docker run "${DOCKER_ARGS[@]}" "dragonfractal/cca:$VERSION" "${CCA_ARGS[@]}"
+        RC=$?
+        set -e
 
         OUT="$OUTPUT_FILE"
-        if [ -s "$OUT" ] && jq -e . "$OUT" >/dev/null 2>&1; then
+        # Distinguish "scan failed to run" from "scan ran, found nothing" — a
+        # nonzero exit or missing/invalid JSON means we have no real result and
+        # must NOT report it as zero findings (that would fail silently).
+        SCAN_STATUS=ok
+        if [ "$RC" -ne 0 ]; then
+          SCAN_STATUS=failed
+          echo "::error title=CCA scan failed::CCA exited $RC — the scan did not complete (check credentials, service-url, and image version)."
+        elif ! { [ -s "$OUT" ] && jq -e . "$OUT" >/dev/null 2>&1; }; then
+          SCAN_STATUS=failed
+          echo "::error title=CCA scan failed::CCA produced no parseable results at $OUT — treating as a failed scan, not zero findings."
+        fi
+
+        if [ "$SCAN_STATUS" = ok ]; then
           # total_findings includes gated findings on the community tier.
           FINDINGS=$(jq -r '.summary.total_findings // (.findings | length) // 0' "$OUT")
           SAVINGS=$(jq -r '(.summary.total_monthly_savings // 0) * 100 | round / 100' "$OUT")
         else
-          echo "::warning::CCA produced no parseable JSON at $OUT; reporting zero."
           FINDINGS=0
           SAVINGS=0
         fi
@@ -107,9 +128,11 @@ runs:
         {
           echo "findings_count=$FINDINGS"
           echo "total_savings=$SAVINGS"
+          echo "scan_status=$SCAN_STATUS"
         } >> "$GITHUB_OUTPUT"
 
         echo "=== CCA Scan Summary ==="
+        echo "  Status: $SCAN_STATUS"
         echo "  Findings: $FINDINGS"
         echo "  Potential savings: \$$SAVINGS/mo"
 
@@ -120,6 +143,7 @@ runs:
         GH_TOKEN: ${{ github.token }}
         FINDINGS: ${{ steps.scan.outputs.findings_count }}
         SAVINGS: ${{ steps.scan.outputs.total_savings }}
+        SCAN_STATUS: ${{ steps.scan.outputs.scan_status }}
         OUT: ${{ inputs.output-file }}
         PR_NUMBER: ${{ github.event.pull_request.number }}
         REPO: ${{ github.repository }}
@@ -130,37 +154,51 @@ runs:
         # ones. Kept as the first line of the body.
         MARKER="<!-- cca-scan-results -->"
 
-        # Top findings table, rendered declaratively from the JSON with jq.
-        if [ -s "$OUT" ] && jq -e . "$OUT" >/dev/null 2>&1; then
-          TOP=$(jq -r '
-            (.findings // []) | sort_by(-(.estimated_monthly_savings // 0)) | .[:10] as $t
-            | if ($t | length) == 0 then "No detailed findings available (upgrade for full details)."
-              else (
-                ["| Severity | Category | Resource | Savings |", "|---|---|---|---|"]
-                + ($t | map("| \(.severity // "?") | \(.category // "?") | `\((.resource_id // "?")[0:40])` | $\(((.estimated_monthly_savings // 0) * 100 | round / 100))/mo |"))
-              ) | join("\n")
-              end
-          ' "$OUT")
+        if [ "$SCAN_STATUS" = "failed" ]; then
+          # Be explicit that this is a failed scan, not a clean bill of health.
+          {
+            echo "$MARKER"
+            echo "## Cloud Cost Analyzer — ⚠️ Scan Failed"
+            echo ""
+            echo "The scan did not complete, so **no cost findings are available** for this PR."
+            echo "Check the workflow logs — usually credentials, \`service-url\`, or the image \`version\`."
+            echo ""
+            echo "---"
+            echo "*[Cloud Cost Analyzer](https://cca.dragonfractal.com)*"
+          } > cca-comment.md
         else
-          TOP="No detailed findings available."
-        fi
+          # Top findings table, rendered declaratively from the JSON with jq.
+          if [ -s "$OUT" ] && jq -e . "$OUT" >/dev/null 2>&1; then
+            TOP=$(jq -r '
+              (.findings // []) | sort_by(-(.estimated_monthly_savings // 0)) | .[:10] as $t
+              | if ($t | length) == 0 then "No detailed findings available (upgrade for full details)."
+                else (
+                  ["| Severity | Category | Resource | Savings |", "|---|---|---|---|"]
+                  + ($t | map("| \(.severity // "?") | \(.category // "?") | `\((.resource_id // "?")[0:40])` | $\(((.estimated_monthly_savings // 0) * 100 | round / 100))/mo |"))
+                ) | join("\n")
+                end
+            ' "$OUT")
+          else
+            TOP="No detailed findings available."
+          fi
 
-        {
-          echo "$MARKER"
-          echo "## Cloud Cost Analyzer — Scan Results"
-          echo ""
-          echo "| Metric | Value |"
-          echo "|--------|-------|"
-          echo "| Findings | **$FINDINGS** |"
-          echo "| Potential Savings | **\$$SAVINGS/mo** |"
-          echo ""
-          echo "### Top Findings"
-          echo ""
-          echo "$TOP"
-          echo ""
-          echo "---"
-          echo "*Scanned by [Cloud Cost Analyzer](https://cca.dragonfractal.com)*"
-        } > cca-comment.md
+          {
+            echo "$MARKER"
+            echo "## Cloud Cost Analyzer — Scan Results"
+            echo ""
+            echo "| Metric | Value |"
+            echo "|--------|-------|"
+            echo "| Findings | **$FINDINGS** |"
+            echo "| Potential Savings | **\$$SAVINGS/mo** |"
+            echo ""
+            echo "### Top Findings"
+            echo ""
+            echo "$TOP"
+            echo ""
+            echo "---"
+            echo "*Scanned by [Cloud Cost Analyzer](https://cca.dragonfractal.com)*"
+          } > cca-comment.md
+        fi
 
         # Update our existing comment if one is already on the PR, else create it.
         COMMENT_ID=$(gh api --paginate "repos/$REPO/issues/$PR_NUMBER/comments" \
@@ -185,3 +223,11 @@ runs:
           echo "::error::CCA found $FINDINGS findings (threshold: $THRESHOLD)"
           exit 1
         fi
+
+    # Runs last so the PR comment (incl. the failure notice) posts first.
+    - name: Fail on scan error
+      if: steps.scan.outputs.scan_status == 'failed' && inputs.fail-on-scan-error == 'true'
+      shell: bash
+      run: |
+        echo "::error::CCA scan failed to run — failing the action. Set fail-on-scan-error: 'false' to downgrade this to a warning."
+        exit 1
