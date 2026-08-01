@@ -84,6 +84,16 @@ runs:
         DOCKER_ARGS=(--rm)
         DOCKER_ARGS+=(-e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY)
         DOCKER_ARGS+=(-e AWS_SESSION_TOKEN -e AWS_DEFAULT_REGION -e AWS_REGION)
+        # Azure creds: a service-principal secret (AZURE_CLIENT_SECRET) is read
+        # directly in-container by the SDK's environment credential. If the
+        # workflow authenticated with OIDC and wrote a federated token file on the
+        # host (e.g. azure/login), mount it read-only so the workload-identity
+        # credential can read it from inside the container.
+        DOCKER_ARGS+=(-e AZURE_SUBSCRIPTION_ID -e AZURE_TENANT_ID -e AZURE_CLIENT_ID)
+        DOCKER_ARGS+=(-e AZURE_CLIENT_SECRET -e AZURE_AUTHORITY_HOST)
+        if [ -n "${AZURE_FEDERATED_TOKEN_FILE:-}" ] && [ -f "${AZURE_FEDERATED_TOKEN_FILE}" ]; then
+          DOCKER_ARGS+=(-v "${AZURE_FEDERATED_TOKEN_FILE}:${AZURE_FEDERATED_TOKEN_FILE}:ro" -e AZURE_FEDERATED_TOKEN_FILE)
+        fi
         DOCKER_ARGS+=(-e CCA_RUNNER=github_action -e CCA_API_KEY)
         DOCKER_ARGS+=(-v "$(pwd):/output" -w /output)
 

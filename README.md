@@ -148,6 +148,48 @@ jobs:
     echo "Status:   ${{ steps.cca.outputs.scan-status }}"
 ```
 
+### Scan Azure instead of AWS
+
+Set `provider: azure` and give the job Azure credentials however you already do —
+the action forwards the standard `AZURE_*` environment variables into the scan.
+
+**Service principal secret** (simplest for the container):
+
+```yaml
+- uses: dragonfractal/cca-scan-action@v1
+  env:
+    AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+    AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+    AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+    AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  with:
+    api-key: ${{ secrets.CCA_API_KEY }}
+    provider: azure
+```
+
+**OIDC (no stored secret)** — `azure/login` writes a federated token file, which
+the action mounts into the container automatically:
+
+```yaml
+permissions:
+  id-token: write
+  contents: read
+steps:
+  - uses: azure/login@v2
+    with:
+      client-id: ${{ secrets.AZURE_CLIENT_ID }}
+      tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+      subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+  - uses: dragonfractal/cca-scan-action@v1
+    with:
+      api-key: ${{ secrets.CCA_API_KEY }}
+      provider: azure
+```
+
+The scan needs only the **Reader** role (plus **Cost Management Reader** for cost data)
+on the subscription.
+
 > **Tip:** pin to the moving major tag `@v1` to get non-breaking updates automatically, or pin an exact release like `@v1.3.0` for full reproducibility.
 
 ## Inputs
