@@ -1,0 +1,26 @@
+{
+  "summary": {
+    "total_findings": 3,
+    "total_monthly_savings": 142.5
+  },
+  "findings": [
+    {
+      "severity": "high",
+      "category": "compute",
+      "resource_id": "i-0abc1234567890def",
+      "estimated_monthly_savings": 90.0
+    },
+    {
+      "severity": "medium",
+      "category": "storage",
+      "resource_id": "vol-0123456789abcdef0",
+      "estimated_monthly_savings": 42.5
+    },
+    {
+      "severity": "low",
+      "category": "network",
+      "resource_id": "eipalloc-00112233445566778",
+      "estimated_monthly_savings": 10.0
+    }
+  ]
+}
