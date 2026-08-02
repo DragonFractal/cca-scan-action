@@ -44,7 +44,7 @@ bash "$SCRIPTS/render-comment.sh" "$FIX/with-findings.json" "$f" "$s" "$st" "$WO
 assert_contains "comment has marker"        "$WORK/c1.md" "<!-- cca-scan-results -->"
 assert_contains "comment has results title" "$WORK/c1.md" "Cloud Cost Analyzer — Scan Results"
 assert_contains "comment lists top finding" "$WORK/c1.md" "i-0abc1234567890def"
-assert_contains "comment shows savings"     "$WORK/c1.md" '**$142.50/mo**'
+assert_contains "comment shows savings"     "$WORK/c1.md" "**\$142.50/mo**"
 
 echo "== case: scan ran, zero findings (RC=0) =="
 IFS='|' read -r f s st <<<"$(summarize "$FIX/zero-findings.json" 0)"
