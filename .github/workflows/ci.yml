@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint (shellcheck + action.yml)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # shellcheck and ruby are preinstalled on ubuntu-latest runners.
+      - name: shellcheck scripts
+        run: shellcheck scripts/*.sh test/*.sh
+
+      - name: Validate action.yml is well-formed
+        run: ruby -ryaml -e 'YAML.load_file("action.yml"); puts "action.yml OK"'
+
+  test:
+    name: Output rendering tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # jq is preinstalled on ubuntu-latest. Exercises summarize.sh +
+      # render-comment.sh against fixtures — the same logic the action runs after
+      # a scan, covering both the PR-comment output and the step outputs used by
+      # scheduled (comment-on-pr:false) runs. No cloud creds or scan required.
+      - name: Run output tests
+        run: bash test/summarize_test.sh
