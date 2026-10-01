@@ -34,6 +34,9 @@ assert_eq() { # <label> <actual> <expected>
 assert_contains() { # <label> <file> <needle>
   if grep -qF "$3" "$2"; then pass "$1"; else fail "$1: '$3' not found in $2"; fi
 }
+assert_not_contains() { # <label> <file> <needle>
+  if grep -qF "$3" "$2"; then fail "$1: '$3' unexpectedly found in $2"; else pass "$1"; fi
+}
 
 echo "== case: scan with findings (RC=0) =="
 IFS='|' read -r f s st <<<"$(summarize "$FIX/with-findings.json" 0)"
@@ -45,6 +48,8 @@ assert_contains "comment has marker"        "$WORK/c1.md" "<!-- cca-scan-results
 assert_contains "comment has results title" "$WORK/c1.md" "Cloud Cost Analyzer — Scan Results"
 assert_contains "comment lists top finding" "$WORK/c1.md" "i-0abc1234567890def"
 assert_contains "comment shows savings"     "$WORK/c1.md" "**\$142.50/mo**"
+assert_contains "comment has dashboard CTA" "$WORK/c1.md" "See it on your dashboard"
+assert_contains "CTA is attributable to this action" "$WORK/c1.md" "utm_source=github_action"
 
 echo "== case: scan ran, zero findings (RC=0) =="
 IFS='|' read -r f s st <<<"$(summarize "$FIX/zero-findings.json" 0)"
@@ -61,6 +66,7 @@ assert_eq "findings_count" "$f" "0"
 assert_eq "scan_status"    "$st" "failed"
 bash "$SCRIPTS/render-comment.sh" "$FIX/with-findings.json" "$f" "$s" "$st" "$WORK/c3.md"
 assert_contains "failed comment says Scan Failed" "$WORK/c3.md" "Scan Failed"
+assert_not_contains "failed comment has no upsell CTA" "$WORK/c3.md" "utm_source=github_action"
 
 echo "== case: scan produced malformed JSON (RC=0) =="
 IFS='|' read -r f s st <<<"$(summarize "$FIX/malformed.json" 0)"

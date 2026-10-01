@@ -40,16 +40,24 @@ That one step pulls the CCA container, scans your AWS account, and comments a fi
 
 ---
 
+**Coverage: AWS fully supported · Azure in BETA · GCP roadmap.** See
+[Scan Azure instead of AWS](#scan-azure-instead-of-aws) for what BETA means in practice.
+
+**Detection and recommendations only.** This action never modifies, resizes, or deletes
+anything in your cloud account — read-only in, a report out. If you want something fixed,
+you make the change.
+
 ## Why
 
 - **Catch waste before it ships.** Idle instances, unattached volumes, oversized databases — surfaced on the PR that introduces them.
 - **Zero footprint.** Runs as a container; nothing to install into your repo or runners beyond Docker.
 - **Actionable.** Every finding comes with an estimated monthly saving, ranked highest-first.
 - **CI-native.** Standard inputs/outputs, a sticky PR comment, and an optional failure threshold to gate merges.
+- **Read-only, always.** The scan only ever reads/describes your resources and cost data. It cannot and will not change anything in your account.
 
 ## Get started in 3 steps
 
-1. **Create a CCA account** and generate an API key from your dashboard at **[cca.dragonfractal.com](https://cca.dragonfractal.com)**. (See [Getting Started](https://cca.dragonfractal.com/docs) for the walkthrough.)
+1. **Create a CCA account** and generate an API key from your dashboard at **[cca.dragonfractal.com](https://cca.dragonfractal.com?utm_source=github_action&utm_medium=readme&utm_campaign=quickstart)**. (See [Getting Started](https://cca.dragonfractal.com/docs) for the walkthrough.)
 2. **Add the key as a repository secret** named `CCA_API_KEY`
    → *Settings → Secrets and variables → Actions → New repository secret*.
 3. **Add the workflow** below. That's it.
@@ -150,6 +158,11 @@ jobs:
 
 ### Scan Azure instead of AWS
 
+> **Azure is in BETA.** Authentication and resource collection work as described below,
+> but Azure coverage is narrower than AWS: fewer detection rules are verified against
+> real Azure resources, so treat Azure findings as a starting point, not a complete
+> picture. AWS remains the fully-supported provider. GCP is not supported (roadmap only).
+
 Set `provider: azure` and give the job Azure credentials however you already do —
 the action forwards the standard `AZURE_*` environment variables into the scan.
 
@@ -245,12 +258,22 @@ The action is a lightweight composite wrapper. On each run it:
 
 No credentials or results leave your runner except the scan request to the CCA service you configure via `service-url`.
 
+**What it never does:** the scan only ever reads and describes resources (and reads cost
+data). It has no code path that creates, modifies, resizes, or deletes anything in your
+account — it reports, it does not act. Acting on a finding is always a decision you make
+and a change you apply yourself.
+
 ## Documentation & support
 
 - 📖 **Documentation:** [cca.dragonfractal.com/docs](https://cca.dragonfractal.com/docs)
 - 🖥️ **CLI installation:** [cca.dragonfractal.com/docs/cli/installation](https://cca.dragonfractal.com/docs/cli/installation)
 - 🌐 **Cloud Cost Analyzer:** [cca.dragonfractal.com](https://cca.dragonfractal.com)
 - 🐛 **Issues & requests:** [open an issue](https://github.com/DragonFractal/cca-scan-action/issues)
+
+## Changelog
+
+See [CHANGELOG.md](./CHANGELOG.md) for release history. `v1` always tracks the latest
+`v1.x.y`; pin an exact tag (e.g. `@v1.4.0`) for full reproducibility.
 
 ## License
 
