@@ -44,6 +44,11 @@ else
     TOP="No detailed findings available."
   fi
 
+  # One non-pushy next step: an account surfaces deeper detail (all rules, not just
+  # the top 10; trend history; Slack/email alerts) that a PR comment can't hold.
+  # utm_* params let the hosted-account funnel attribute signups back to this Action.
+  CCA_URL="https://cca.dragonfractal.com?utm_source=github_action&utm_medium=pr_comment&utm_campaign=scan_results"
+
   {
     echo "$MARKER"
     echo "## Cloud Cost Analyzer — Scan Results"
@@ -58,6 +63,6 @@ else
     echo "$TOP"
     echo ""
     echo "---"
-    echo "*Scanned by [Cloud Cost Analyzer](https://cca.dragonfractal.com)*"
+    echo "*Scanned by [Cloud Cost Analyzer](https://cca.dragonfractal.com). Want every finding, trends over time, and alerts outside of CI? [See it on your dashboard]($CCA_URL).*"
   } > "$DEST"
 fi
