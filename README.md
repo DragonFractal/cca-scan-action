@@ -211,7 +211,7 @@ on the subscription.
 |-------|----------|---------|-------------|
 | `api-key` | **Yes** | — | Your CCA API key ([get one](https://cca.dragonfractal.com)). |
 | `provider` | No | `aws` | Cloud provider to scan (`aws`, `azure`). |
-| `regions` | No | *(all)* | Comma-separated regions, e.g. `us-east-1,us-west-2`. |
+| `regions` | No | `us-east-1` | Comma-separated regions, e.g. `us-east-1,us-west-2`. Only these are scanned. If you leave it empty the scan covers `us-east-1` only, not all regions. |
 | `service-url` | No | `https://cca.dragonfractal.com` | CCA service endpoint. |
 | `version` | No | `latest` | CCA container image tag. |
 | `output-file` | No | `cca-scan-results.json` | Path for the JSON results file. |
