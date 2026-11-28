@@ -76,6 +76,63 @@ echo "== case: results file missing (RC=0) =="
 IFS='|' read -r f s st <<<"$(summarize "$WORK/does-not-exist.json" 0)"
 assert_eq "missing -> failed" "$st" "failed"
 
+# Run summarize.sh with a scan log; leaves outputs in $WORK/gh_output and the step
+# summary in $WORK/summary.md, stdout (annotation + summary) in $WORK/stdout.
+summarize_with_log() { # <results> <rc> <log>
+  : > "$WORK/gh_output"; : > "$WORK/summary.md"
+  GITHUB_OUTPUT="$WORK/gh_output" GITHUB_STEP_SUMMARY="$WORK/summary.md" \
+    bash "$SCRIPTS/summarize.sh" "$1" "$2" "$3" > "$WORK/stdout" 2>&1 || true
+}
+
+echo "== case: failed scan, CLI Error:/Fix: passed through =="
+summarize_with_log "$WORK/does-not-exist.json" 1 "$FIX/scan-failure.log"
+assert_contains "output scan_status failed"   "$WORK/gh_output" "scan_status=failed"
+assert_contains "output has Error line"       "$WORK/gh_output" "Error: AZURE_SUBSCRIPTION_ID is set to"
+assert_contains "output has Fix line"         "$WORK/gh_output" "Fix: correct or unset AZURE_SUBSCRIPTION_ID"
+assert_not_contains "output has no colour codes" "$WORK/gh_output" $'\033'
+assert_contains "step summary title"          "$WORK/summary.md" "### CCA scan failed"
+assert_contains "step summary has Error line" "$WORK/summary.md" "Error: AZURE_SUBSCRIPTION_ID is set to"
+assert_contains "step summary has Fix line"   "$WORK/summary.md" "Fix: correct or unset"
+assert_contains "step summary says what next" "$WORK/summary.md" "What to do next"
+assert_contains "annotation carries the Error" "$WORK/stdout" "::error title=CCA scan failed::CCA exited 1"
+assert_contains "annotation includes reason"   "$WORK/stdout" "Error: AZURE_SUBSCRIPTION_ID is set to"
+
+echo "== case: credential values are masked =="
+: > "$WORK/gh_output"; : > "$WORK/summary.md"
+# shellcheck disable=SC2016  # the dollar sign is literal in this sample secret
+CCA_API_KEY="sample-key-ABCDEF123456" AZURE_CLIENT_SECRET='s3cr3t/with+special.chars$1' \
+AZURE_SUBSCRIPTION_ID="00000000-1111-2222-3333-444444444444" \
+GITHUB_OUTPUT="$WORK/gh_output" GITHUB_STEP_SUMMARY="$WORK/summary.md" \
+  bash "$SCRIPTS/summarize.sh" "$WORK/does-not-exist.json" 1 "$FIX/scan-failure-secret.log" > "$WORK/stdout" 2>&1 || true
+for f in gh_output summary.md stdout; do
+  assert_not_contains "api key masked in $f"       "$WORK/$f" "sample-key-ABCDEF123456"
+  # shellcheck disable=SC2016
+  assert_not_contains "client secret masked in $f" "$WORK/$f" 's3cr3t/with+special.chars$1'
+done
+assert_contains "masked marker present" "$WORK/gh_output" "request rejected for key ***"
+: > "$WORK/gh_output"; : > "$WORK/summary.md"
+AZURE_SUBSCRIPTION_ID="00000000-1111-2222-3333-444444444444" \
+GITHUB_OUTPUT="$WORK/gh_output" GITHUB_STEP_SUMMARY="$WORK/summary.md" \
+  bash "$SCRIPTS/summarize.sh" "$WORK/does-not-exist.json" 1 "$FIX/scan-failure.log" > "$WORK/stdout" 2>&1 || true
+assert_not_contains "subscription id masked in output"  "$WORK/gh_output"  "00000000-1111-2222-3333-444444444444"
+assert_not_contains "subscription id masked in summary" "$WORK/summary.md" "00000000-1111-2222-3333-444444444444"
+assert_not_contains "subscription id masked in log"     "$WORK/stdout"     "00000000-1111-2222-3333-444444444444"
+
+echo "== case: failed scan, log has no Error: line =="
+summarize_with_log "$WORK/does-not-exist.json" 1 "$FIX/scan-failure-no-error.log"
+assert_contains "summary shows last lines" "$WORK/summary.md" "segfault-like crash"
+
+echo "== case: failed scan, no log given (old call shape) =="
+summarize_with_log "$WORK/does-not-exist.json" 1 ""
+assert_contains "summary still written" "$WORK/summary.md" "### CCA scan failed"
+assert_contains "summary notes no capture" "$WORK/summary.md" "output was not captured"
+
+echo "== case: successful scan writes no failure summary and empty scan_error =="
+summarize_with_log "$FIX/with-findings.json" 0 "$FIX/scan-failure.log"
+assert_eq "no step summary on success" "$(wc -c < "$WORK/summary.md" | tr -d ' ')" "0"
+assert_not_contains "scan_error empty on success" "$WORK/gh_output" "Error:"
+assert_contains "scan_error key present" "$WORK/gh_output" "scan_error<<"
+
 if [ "$FAILED" -ne 0 ]; then
   echo "TESTS FAILED"; exit 1
 fi
