@@ -226,6 +226,7 @@ on the subscription.
 | `findings-count` | Number of findings detected. |
 | `total-savings` | Total potential monthly savings, in USD. |
 | `scan-status` | `ok` if the scan completed, `failed` if it could not run. |
+| `scan-error` | When the scan failed: the CLI's own `Error:` and `Fix:` lines (at most four), with credential values masked. Empty when the scan ran. |
 
 ## The PR comment
 
@@ -241,10 +242,19 @@ The comment is **sticky**: subsequent runs on the same PR update the existing co
 
 A scan that **can't run** — bad credentials, an unreachable service, a wrong image tag — is reported as a **failure**, never as a misleading "0 findings". When this happens the action:
 
-- prints a clear `::error::` annotation with the likely cause,
+- prints a clear `::error::` annotation with the likely cause, followed by the first `Error:` line the CLI reported,
+- writes a **CCA scan failed** section to the job's step summary with the CLI's `Error:` and `Fix:` lines and what to do next,
+- exposes those lines as the `scan-error` output (credential values such as your API key and cloud credentials are masked),
 - posts a **⚠️ Scan Failed** PR comment instead of a `$0 / 0 findings` result,
 - sets `scan-status: failed`, and
 - **fails the action** so it can't pass silently.
+
+Example (sample text, not from a real run) in the step summary:
+
+```
+Error: AZURE_SUBSCRIPTION_ID is set to ***, but these Azure credentials cannot see that subscription.
+Fix: correct or unset AZURE_SUBSCRIPTION_ID, or choose one with --account <subscription-id>.
+```
 
 Prefer a visible warning over a hard failure? Set `fail-on-scan-error: 'false'` — the error annotation and comment still appear, but the run stays green. A scan that runs and genuinely finds nothing is always `ok`.
 

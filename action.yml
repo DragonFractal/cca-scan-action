@@ -52,6 +52,9 @@ outputs:
   scan-status:
     description: 'Whether the scan completed (ok) or failed to run (failed)'
     value: ${{ steps.scan.outputs.scan_status }}
+  scan-error:
+    description: "When the scan failed: the CLI's own Error:/Fix: lines (at most four, credentials masked). Empty when the scan ran."
+    value: ${{ steps.scan.outputs.scan_error }}
 
 runs:
   using: 'composite'
@@ -107,15 +110,19 @@ runs:
         CCA_ARGS+=(-o json -f "/output/$OUTPUT_FILE" --all)
 
         echo "Running CCA scan (runner=github_action)…"
+        # Keep a copy of the CLI's output (still streamed to this log) so its
+        # Error:/Fix: lines can be passed to the step summary and outputs.
+        SCAN_LOG="$(mktemp "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/cca-scan-log.XXXXXX")"
         set +e
-        docker run "${DOCKER_ARGS[@]}" "dragonfractal/cca:$VERSION" "${CCA_ARGS[@]}"
-        RC=$?
+        docker run "${DOCKER_ARGS[@]}" "dragonfractal/cca:$VERSION" "${CCA_ARGS[@]}" 2>&1 | tee "$SCAN_LOG"
+        RC=${PIPESTATUS[0]}
         set -e
 
-        # Derive outputs (findings_count/total_savings/scan_status) from the
+        # Derive outputs (findings_count/total_savings/scan_status/scan_error) from the
         # results file. Shared with the test suite so the output logic is covered
         # without a live scan. See test/summarize_test.sh.
-        bash "$GITHUB_ACTION_PATH/scripts/summarize.sh" "$OUTPUT_FILE" "$RC"
+        bash "$GITHUB_ACTION_PATH/scripts/summarize.sh" "$OUTPUT_FILE" "$RC" "$SCAN_LOG"
+        rm -f "$SCAN_LOG"
 
     - name: Comment on PR
       if: inputs.comment-on-pr == 'true' && github.event_name == 'pull_request'

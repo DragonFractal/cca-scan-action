@@ -6,6 +6,11 @@ All notable changes to this action are documented here. Versions follow
 ## [Unreleased]
 
 ### Added
+- A failed scan now shows the CLI's own `Error:` and `Fix:` lines in the job step
+  summary, in the `::error::` annotation, and in a new `scan-error` output. Credential
+  values (API key, AWS and Azure credentials, Azure subscription and tenant ids) are
+  masked. The CLI output is still streamed to the step log as before. `summarize.sh`
+  takes an optional third argument, the captured log; without it behaviour is unchanged.
 - Exact coverage statement in the README (`AWS fully supported · Azure in BETA · GCP
   roadmap`) and an explicit BETA caveat on the Azure usage section.
 - Explicit "never modifies your account" statement in the README — detection and
